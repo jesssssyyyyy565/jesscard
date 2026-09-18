@@ -1,0 +1,10 @@
+{
+  "name": "Study Cards",
+  "short_name": "StudyCards",
+  "description": "Offline flashcards and PDF notes",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f6fa",
+  "theme_color": "#222222",
+  "icons": []
+}

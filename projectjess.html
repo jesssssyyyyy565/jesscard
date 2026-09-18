@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Study Cards</title>
+
+    <meta name="theme-color" content="#111827">
+
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+</head>
+
+<body>
+
+    <!-- ================= HEADER ================= -->
+
+    <header class="topbar">
+
+        <div class="brand">
+            <div class="brand-icon">S</div>
+
+            <div>
+                <h1>Study Cards</h1>
+                <p>Your personal study space</p>
+            </div>
+        </div>
+
+        <div class="offline-status">
+            <span class="status-dot"></span>
+            Saved locally
+        </div>
+
+    </header>
+
+
+    <!-- ================= NAVIGATION ================= -->
+
+    <nav class="tabs">
+
+        <button class="tab active" data-tab="flashcardsTab">
+            <span class="tab-icon">▣</span>
+            <span>Flash Cards</span>
+        </button>
+
+        <button class="tab" data-tab="notesTab">
+            <span class="tab-icon">▤</span>
+            <span>PDF Notes</span>
+        </button>
+
+        <button class="tab" data-tab="studyTab">
+            <span class="tab-icon">◆</span>
+            <span>Study Mode</span>
+        </button>
+
+    </nav>
+
+
+    <!-- ================= MAIN ================= -->
+
+    <main>
+
+
+        <!-- ==================================================
+             FLASH CARDS
+        ================================================== -->
+
+        <section id="flashcardsTab" class="tab-content active">
+
+            <div class="page-heading">
+
+                <div>
+                    <div class="eyebrow">YOUR COLLECTION</div>
+
+                    <h2>My Flash Cards</h2>
+
+                    <p>
+                        Create your own questions and answers
+                        and keep them saved on your device.
+                    </p>
+                </div>
+
+                <button id="addCardBtn" class="primary-btn">
+                    <span>+</span>
+                    Add Flash Card
+                </button>
+
+            </div>
+
+
+            <div
+                id="flashcardsContainer"
+                class="card-grid">
+            </div>
+
+
+            <div
+                id="flashcardsEmpty"
+                class="empty-state">
+
+                <div class="empty-icon">▣</div>
+
+                <h3>No flash cards yet</h3>
+
+                <p>
+                    Create your first flash card to start
+                    building your study collection.
+                </p>
+
+                <button
+                    class="primary-btn"
+                    onclick="document.getElementById('addCardBtn').click()">
+
+                    + Create Flash Card
+
+                </button>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- ==================================================
+             PDF NOTES
+        ================================================== -->
+
+        <section id="notesTab" class="tab-content">
+
+            <div class="page-heading">
+
+                <div>
+                    <div class="eyebrow">YOUR FILES</div>
+
+                    <h2>PDF Notes</h2>
+
+                    <p>
+                        Store your PDF study materials
+                        directly on this device.
+                    </p>
+                </div>
+
+
+                <label class="primary-btn upload-btn">
+
+                    <span>+</span>
+                    Add PDF
+
+                    <input
+                        id="pdfInput"
+                        type="file"
+                        accept="application/pdf"
+                        hidden>
+
+                </label>
+
+            </div>
+
+
+            <div
+                id="pdfContainer"
+                class="pdf-grid">
+            </div>
+
+
+            <div
+                id="pdfEmpty"
+                class="empty-state">
+
+                <div class="empty-icon">▤</div>
+
+                <h3>No PDF notes yet</h3>
+
+                <p>
+                    Upload your lecture notes,
+                    reviewers, or other PDF materials.
+                </p>
+
+                <label class="primary-btn upload-btn">
+
+                    + Upload PDF
+
+                    <input
+                        type="file"
+                        accept="application/pdf"
+                        hidden
+                        onchange="document.getElementById('pdfInput').files = this.files; document.getElementById('pdfInput').dispatchEvent(new Event('change'))">
+
+                </label>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- ==================================================
+             STUDY MODE
+        ================================================== -->
+
+        <section id="studyTab" class="tab-content">
+
+            <div class="page-heading study-heading">
+
+                <div>
+
+                    <div class="eyebrow">PRACTICE</div>
+
+                    <h2>Study Mode</h2>
+
+                    <p>
+                        Review your flash cards in different
+                        question formats.
+                    </p>
+
+                </div>
+
+
+                <div class="study-controls">
+
+                    <div class="select-wrapper">
+
+                        <label for="cardType">
+                            Card Type
+                        </label>
+
+                        <select id="cardType">
+
+                            <option value="classic">
+                                Classic Q&A
+                            </option>
+
+                            <option value="reverse">
+                                Reverse
+                            </option>
+
+                            <option value="multiple">
+                                Multiple Choice
+                            </option>
+
+                            <option value="truefalse">
+                                True or False
+                            </option>
+
+                        </select>
+
+                    </div>
+
+
+                    <button
+                        id="shuffleBtn"
+                        class="primary-btn">
+
+                        <span>↻</span>
+                        Shuffle
+
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <div
+                id="studyEmpty"
+                class="empty-state">
+
+                <div class="empty-icon">◆</div>
+
+                <h3>Ready to study?</h3>
+
+                <p>
+                    Add some flash cards first,
+                    then come here to practice.
+                </p>
+
+            </div>
+
+
+            <div
+                id="studyArea"
+                class="study-area hidden">
+
+                <div class="study-top">
+
+                    <span id="studyCounter">
+                        Card 1 of 1
+                    </span>
+
+                </div>
+
+
+                <div class="study-card">
+
+                    <div class="study-card-label">
+                        <span class="label-line"></span>
+
+                        <span id="studyLabel">
+                            Question
+                        </span>
+
+                    </div>
+
+
+                    <h3 id="studyQuestion">
+                    </h3>
+
+
+                    <div
+                        id="choices"
+                        class="choices">
+                    </div>
+
+
+                    <button
+                        id="showAnswerBtn"
+                        class="show-answer-btn">
+
+                        Show Answer
+
+                    </button>
+
+
+                    <div
+                        id="studyAnswer"
+                        class="study-answer hidden">
+                    </div>
+
+                </div>
+
+
+                <div class="study-navigation">
+
+                    <button
+                        id="prevBtn"
+                        class="nav-btn">
+
+                        ← Previous
+
+                    </button>
+
+
+                    <button
+                        id="nextBtn"
+                        class="nav-btn">
+
+                        Next →
+
+                    </button>
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+
+    <!-- ==================================================
+         FLASHCARD MODAL
+    ================================================== -->
+
+    <div
+        id="cardModal"
+        class="modal hidden">
+
+        <div class="modal-box">
+
+            <button
+                id="closeModalBtn"
+                class="close-btn">
+
+                ×
+
+            </button>
+
+
+            <div class="modal-icon">
+                +
+            </div>
+
+
+            <h2 id="modalTitle">
+                Add Flash Card
+            </h2>
+
+            <p class="modal-description">
+                Add a question and its answer.
+            </p>
+
+
+            <label for="questionInput">
+                Question
+            </label>
+
+            <textarea
+                id="questionInput"
+                placeholder="Example: What is the formula for the area of a circle?">
+            </textarea>
+
+
+            <label for="answerInput">
+                Answer
+            </label>
+
+            <textarea
+                id="answerInput"
+                placeholder="Example: A = πr²">
+            </textarea>
+
+
+            <div class="modal-actions">
+
+                <button
+                    id="closeModalBtn2"
+                    class="cancel-btn">
+
+                    Cancel
+
+                </button>
+
+
+                <button
+                    id="saveCardBtn"
+                    class="primary-btn">
+
+                    Save Flash Card
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- ================= JAVASCRIPT ================= -->
+
+    <script src="script.js"></script>
+
+</body>
+</html>
