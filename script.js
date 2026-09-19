@@ -1,1461 +1,1619 @@
-// ======================================================
-// STUDY CARDS APP
-// ======================================================
+/* ==================================================
+   10 STUDY HUB
+   Flash Cards + Images + PDFs + Study Mode
+================================================== */
+
+
+/* ==================================================
+   DATABASE
+================================================== */
 
 const DB_NAME = "StudyCardsDatabase";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let db;
-let editingId = null;
+
+let flashcards = [];
+let pdfs = [];
+
+let editingCardId = null;
+let selectedImage = null;
 
 let studyCards = [];
 let studyIndex = 0;
 
 
-// ======================================================
-// DATABASE
-// ======================================================
-
-function openDatabase() {
-
-  return new Promise((resolve, reject) => {
-
-    const request = indexedDB.open(
-      DB_NAME,
-      DB_VERSION
-    );
-
-
-    request.onupgradeneeded = function(event) {
-
-      const database = event.target.result;
-
-
-      // Flashcards storage
-      if (!database.objectStoreNames.contains("flashcards")) {
-
-        database.createObjectStore(
-          "flashcards",
-          {
-            keyPath: "id",
-            autoIncrement: true
-          }
-        );
-
-      }
-
-
-      // PDF storage
-      if (!database.objectStoreNames.contains("pdfs")) {
-
-        database.createObjectStore(
-          "pdfs",
-          {
-            keyPath: "id",
-            autoIncrement: true
-          }
-        );
-
-      }
-
-    };
-
-
-    request.onsuccess = function() {
-
-      db = request.result;
-
-      resolve(db);
-
-    };
-
-
-    request.onerror = function() {
-
-      reject(request.error);
-
-    };
-
-  });
-
-}
-
-
-// ======================================================
-// DATABASE HELPERS
-// ======================================================
-
-function getStore(
-  storeName,
-  mode = "readonly"
-) {
-
-  return db
-    .transaction(storeName, mode)
-    .objectStore(storeName);
-
-}
-
-
-function getAll(storeName) {
-
-  return new Promise((resolve, reject) => {
-
-    const request =
-      getStore(storeName).getAll();
-
-
-    request.onsuccess = function() {
-
-      resolve(request.result);
-
-    };
-
-
-    request.onerror = function() {
-
-      reject(request.error);
-
-    };
-
-  });
-
-}
-
-
-function addItem(
-  storeName,
-  item
-) {
-
-  return new Promise((resolve, reject) => {
-
-    const request =
-      getStore(
-        storeName,
-        "readwrite"
-      ).add(item);
-
-
-    request.onsuccess = function() {
-
-      resolve(request.result);
-
-    };
-
-
-    request.onerror = function() {
-
-      reject(request.error);
-
-    };
-
-  });
-
-}
-
-
-function putItem(
-  storeName,
-  item
-) {
-
-  return new Promise((resolve, reject) => {
-
-    const request =
-      getStore(
-        storeName,
-        "readwrite"
-      ).put(item);
-
-
-    request.onsuccess = function() {
-
-      resolve(request.result);
-
-    };
-
-
-    request.onerror = function() {
-
-      reject(request.error);
-
-    };
-
-  });
-
-}
-
-
-function deleteItem(
-  storeName,
-  id
-) {
-
-  return new Promise((resolve, reject) => {
-
-    const request =
-      getStore(
-        storeName,
-        "readwrite"
-      ).delete(id);
-
-
-    request.onsuccess = function() {
-
-      resolve();
-
-    };
-
-
-    request.onerror = function() {
-
-      reject(request.error);
-
-    };
-
-  });
-
-}
-
-
-// ======================================================
-// HELPER FUNCTIONS
-// ======================================================
-
-function $(id) {
-
-  return document.getElementById(id);
-
-}
+/* ==================================================
+   HELPERS
+================================================== */
+
+const $ = (selector) =>
+    document.querySelector(selector);
 
 
 function escapeHTML(value) {
 
-  return String(value)
-
-    .replaceAll("&", "&amp;")
-
-    .replaceAll("<", "&lt;")
-
-    .replaceAll(">", "&gt;")
-
-    .replaceAll(
-      '"',
-      "&quot;"
-    )
-
-    .replaceAll(
-      "'",
-      "&#039;"
-    );
-
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
 
 function formatFileSize(bytes) {
 
-  if (bytes < 1024) {
+    if (bytes < 1024)
+        return bytes + " B";
 
-    return bytes + " B";
+    if (bytes < 1024 * 1024)
+        return (bytes / 1024).toFixed(1) + " KB";
 
-  }
-
-
-  if (bytes < 1024 * 1024) {
-
-    return (
-      bytes / 1024
-    ).toFixed(1) + " KB";
-
-  }
-
-
-  return (
-    bytes /
-    (1024 * 1024)
-  ).toFixed(1) + " MB";
-
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
 
-// ======================================================
-// TABS
-// ======================================================
+/* ==================================================
+   INDEXED DB
+================================================== */
 
-document
-  .querySelectorAll(".tab")
-  .forEach(button => {
+function openDatabase() {
 
-    button.addEventListener(
-      "click",
-      function() {
+    return new Promise((resolve, reject) => {
 
-        document
-          .querySelectorAll(".tab")
-          .forEach(tab => {
+        const request =
+            indexedDB.open(DB_NAME, DB_VERSION);
 
-            tab.classList.remove(
-              "active"
+
+        request.onupgradeneeded = function (event) {
+
+            const database = event.target.result;
+
+
+            if (!database.objectStoreNames.contains("flashcards")) {
+
+                database.createObjectStore(
+                    "flashcards",
+                    {
+                        keyPath: "id"
+                    }
+                );
+            }
+
+
+            if (!database.objectStoreNames.contains("pdfs")) {
+
+                database.createObjectStore(
+                    "pdfs",
+                    {
+                        keyPath: "id"
+                    }
+                );
+            }
+        };
+
+
+        request.onsuccess = function () {
+
+            db = request.result;
+
+            resolve(db);
+        };
+
+
+        request.onerror = function () {
+
+            reject(request.error);
+        };
+    });
+}
+
+
+function getAll(storeName) {
+
+    return new Promise((resolve, reject) => {
+
+        const transaction =
+            db.transaction(
+                storeName,
+                "readonly"
             );
 
-          });
+        const store =
+            transaction.objectStore(storeName);
+
+        const request =
+            store.getAll();
 
 
-        document
-          .querySelectorAll(".tab-content")
-          .forEach(section => {
+        request.onsuccess = () => {
 
-            section.classList.remove(
-              "active"
+            resolve(request.result);
+        };
+
+
+        request.onerror = () => {
+
+            reject(request.error);
+        };
+    });
+}
+
+
+function addItem(storeName, item) {
+
+    return new Promise((resolve, reject) => {
+
+        const transaction =
+            db.transaction(
+                storeName,
+                "readwrite"
             );
 
-          });
+        const store =
+            transaction.objectStore(storeName);
+
+        const request =
+            store.add(item);
 
 
-        button.classList.add(
-          "active"
+        request.onsuccess = () =>
+            resolve(item);
+
+
+        request.onerror = () =>
+            reject(request.error);
+    });
+}
+
+
+function putItem(storeName, item) {
+
+    return new Promise((resolve, reject) => {
+
+        const transaction =
+            db.transaction(
+                storeName,
+                "readwrite"
+            );
+
+        const store =
+            transaction.objectStore(storeName);
+
+        const request =
+            store.put(item);
+
+
+        request.onsuccess = () =>
+            resolve(item);
+
+
+        request.onerror = () =>
+            reject(request.error);
+    });
+}
+
+
+function deleteItem(storeName, id) {
+
+    return new Promise((resolve, reject) => {
+
+        const transaction =
+            db.transaction(
+                storeName,
+                "readwrite"
+            );
+
+        const store =
+            transaction.objectStore(storeName);
+
+        const request =
+            store.delete(id);
+
+
+        request.onsuccess = () =>
+            resolve();
+
+
+        request.onerror = () =>
+            reject(request.error);
+    });
+}
+
+
+/* ==================================================
+   TABS
+================================================== */
+
+document.querySelectorAll(".tab")
+    .forEach(tab => {
+
+        tab.addEventListener(
+            "click",
+            () => {
+
+                document
+                    .querySelectorAll(".tab")
+                    .forEach(item =>
+                        item.classList.remove("active")
+                    );
+
+
+                document
+                    .querySelectorAll(".tab-content")
+                    .forEach(section =>
+                        section.classList.remove("active")
+                    );
+
+
+                tab.classList.add("active");
+
+
+                const target =
+                    document.getElementById(
+                        tab.dataset.tab
+                    );
+
+
+                if (target) {
+                    target.classList.add("active");
+                }
+            }
         );
 
-
-        $(
-          button.dataset.tab
-        ).classList.add(
-          "active"
-        );
+    });
 
 
-        if (
-          button.dataset.tab ===
-          "studyTab"
-        ) {
+/* ==================================================
+   FLASHCARD MODAL
+================================================== */
 
-          loadStudyCards();
+const cardModal =
+    $("#cardModal");
 
-        }
+const addCardBtn =
+    $("#addCardBtn");
 
-      }
-    );
+const closeModalBtn =
+    $("#closeModalBtn");
 
-  });
+const saveCardBtn =
+    $("#saveCardBtn");
+
+const modalTitle =
+    $("#modalTitle");
+
+const questionInput =
+    $("#questionInput");
+
+const answerInput =
+    $("#answerInput");
 
 
-// ======================================================
-// FLASHCARDS
-// ======================================================
+function resetImageInput() {
 
-$("addCardBtn")
-  .addEventListener(
-    "click",
-    function() {
+    selectedImage = null;
 
-      editingId = null;
+    const input =
+        $("#imageInput");
 
-      $("modalTitle")
-        .textContent =
+    const preview =
+        $("#imagePreview");
+
+    const previewImage =
+        $("#previewImage");
+
+    const uploadText =
+        $("#imageUploadText");
+
+
+    if (input)
+        input.value = "";
+
+    if (preview)
+        preview.classList.add("hidden");
+
+    if (previewImage)
+        previewImage.src = "";
+
+    if (uploadText)
+        uploadText.textContent =
+            "Click to upload a photo";
+}
+
+
+function openAddModal() {
+
+    editingCardId = null;
+
+    modalTitle.textContent =
         "Add Flash Card";
 
-      $("questionInput")
-        .value = "";
+    questionInput.value = "";
 
-      $("answerInput")
-        .value = "";
+    answerInput.value = "";
 
-      $("cardModal")
-        .classList.remove(
-          "hidden"
-        );
+    resetImageInput();
 
-    }
-  );
+    cardModal.classList.remove("hidden");
 
-
-$("closeModalBtn")
-  .addEventListener(
-    "click",
-    closeModal
-  );
-
-
-$("cardModal")
-  .addEventListener(
-    "click",
-    function(event) {
-
-      if (
-        event.target ===
-        $("cardModal")
-      ) {
-
-        closeModal();
-
-      }
-
-    }
-  );
-
-
-function closeModal() {
-
-  $("cardModal")
-    .classList.add(
-      "hidden"
-    );
-
+    questionInput.focus();
 }
 
 
-// ======================================================
-// SAVE FLASHCARD
-// ======================================================
+function closeCardModal() {
 
-$("saveCardBtn")
-  .addEventListener(
+    cardModal.classList.add("hidden");
+
+    editingCardId = null;
+
+    resetImageInput();
+}
+
+
+addCardBtn.addEventListener(
     "click",
-    async function() {
-
-      const question =
-        $("questionInput")
-          .value
-          .trim();
+    openAddModal
+);
 
 
-      const answer =
-        $("answerInput")
-          .value
-          .trim();
+closeModalBtn.addEventListener(
+    "click",
+    closeCardModal
+);
 
 
-      if (!question || !answer) {
-
-        alert(
-          "Please enter both a question and an answer."
-        );
-
-        return;
-
-      }
-
-
-      if (editingId === null) {
-
-        await addItem(
-          "flashcards",
-          {
-            question,
-            answer
-          }
-        );
-
-      } else {
-
-        await putItem(
-          "flashcards",
-          {
-            id: editingId,
-            question,
-            answer
-          }
-        );
-
-      }
-
-
-      closeModal();
-
-      await loadFlashcards();
-
-      await loadStudyCards();
-
-    }
-  );
-
-
-// ======================================================
-// DISPLAY FLASHCARDS
-// ======================================================
-
-async function loadFlashcards() {
-
-  const cards =
-    await getAll(
-      "flashcards"
-    );
-
-
-  const container =
-    $("flashcardsContainer");
-
-
-  container.innerHTML = "";
-
-
-  $("flashcardsEmpty")
-    .classList.toggle(
-      "hidden",
-      cards.length > 0
-    );
-
-
-  cards.forEach(card => {
-
-    const div =
-      document.createElement(
-        "div"
-      );
-
-
-    div.className =
-      "flashcard";
-
-
-    div.innerHTML = `
-
-      <h3>
-        ${escapeHTML(card.question)}
-      </h3>
-
-      <div class="answer-preview">
-        ${escapeHTML(card.answer)}
-      </div>
-
-      <div class="actions">
-
-        <button class="secondary edit">
-          Edit
-        </button>
-
-        <button class="secondary delete">
-          Delete
-        </button>
-
-      </div>
-
-    `;
-
-
-    // EDIT
-    div
-      .querySelector(".edit")
-      .addEventListener(
+document
+    .querySelector(".modal-overlay")
+    .addEventListener(
         "click",
-        function() {
-
-          editingId =
-            card.id;
+        closeCardModal
+    );
 
 
-          $("modalTitle")
-            .textContent =
-            "Edit Flash Card";
+/* ==================================================
+   IMAGE UPLOAD
+================================================== */
+
+const imageInput =
+    $("#imageInput");
+
+const imagePreview =
+    $("#imagePreview");
+
+const previewImage =
+    $("#previewImage");
+
+const imageUploadText =
+    $("#imageUploadText");
+
+const removeImageBtn =
+    $("#removeImageBtn");
 
 
-          $("questionInput")
-            .value =
-            card.question;
+imageInput.addEventListener(
+    "change",
+    function () {
+
+        const file =
+            this.files[0];
 
 
-          $("answerInput")
-            .value =
-            card.answer;
+        if (!file)
+            return;
 
 
-          $("cardModal")
-            .classList.remove(
-              "hidden"
+        if (!file.type.startsWith("image/")) {
+
+            alert(
+                "Please select an image file."
             );
 
+            this.value = "";
+
+            return;
         }
-      );
 
 
-    // DELETE
-    div
-      .querySelector(".delete")
-      .addEventListener(
-        "click",
-        async function() {
+        const reader =
+            new FileReader();
 
-          if (
-            confirm(
-              "Delete this flash card?"
-            )
-          ) {
 
-            await deleteItem(
-              "flashcards",
-              card.id
+        reader.onload =
+            function (event) {
+
+                selectedImage =
+                    event.target.result;
+
+
+                previewImage.src =
+                    selectedImage;
+
+
+                imagePreview
+                    .classList
+                    .remove("hidden");
+
+
+                imageUploadText.textContent =
+                    file.name;
+            };
+
+
+        reader.readAsDataURL(file);
+    }
+);
+
+
+removeImageBtn.addEventListener(
+    "click",
+    function () {
+
+        selectedImage = null;
+
+        imageInput.value = "";
+
+        imagePreview
+            .classList
+            .add("hidden");
+
+        previewImage.src = "";
+
+        imageUploadText.textContent =
+            "Click to upload a photo";
+    }
+);
+
+
+/* ==================================================
+   SAVE FLASHCARD
+================================================== */
+
+saveCardBtn.addEventListener(
+    "click",
+    async function () {
+
+        const question =
+            questionInput.value.trim();
+
+        const answer =
+            answerInput.value.trim();
+
+
+        if (!question) {
+
+            alert(
+                "Please enter a question."
             );
+
+            questionInput.focus();
+
+            return;
+        }
+
+
+        if (!answer) {
+
+            alert(
+                "Please enter an answer."
+            );
+
+            answerInput.focus();
+
+            return;
+        }
+
+
+        const card = {
+
+            id:
+                editingCardId ||
+                Date.now(),
+
+            question,
+
+            answer,
+
+            image:
+                selectedImage || null
+        };
+
+
+        try {
+
+            if (editingCardId) {
+
+                await putItem(
+                    "flashcards",
+                    card
+                );
+
+            } else {
+
+                await addItem(
+                    "flashcards",
+                    card
+                );
+            }
 
 
             await loadFlashcards();
 
-            await loadStudyCards();
+            closeCardModal();
 
-          }
+        } catch (error) {
 
+            console.error(error);
+
+            alert(
+                "Unable to save the flash card."
+            );
         }
-      );
+    }
+);
 
 
-    container.appendChild(
-      div
+/* ==================================================
+   LOAD FLASHCARDS
+================================================== */
+
+async function loadFlashcards() {
+
+    flashcards =
+        await getAll("flashcards");
+
+
+    flashcards.sort(
+        (a, b) => b.id - a.id
     );
 
-  });
 
+    renderFlashcards();
+
+    prepareStudyMode();
 }
 
 
-// ======================================================
-// PDF NOTES
-// ======================================================
+/* ==================================================
+   RENDER FLASHCARDS
+================================================== */
 
-$("pdfInput")
-  .addEventListener(
-    "change",
-    async function(event) {
+function renderFlashcards() {
 
-      const file =
-        event.target.files[0];
+    const container =
+        $("#flashcardsContainer");
 
-
-      if (!file) return;
+    const empty =
+        $("#flashcardsEmpty");
 
 
-      if (
-        file.type !==
-        "application/pdf"
-      ) {
+    container.innerHTML = "";
 
-        alert(
-          "Please select a PDF file."
-        );
 
-        event.target.value = "";
+    if (flashcards.length === 0) {
+
+        empty.classList.remove("hidden");
 
         return;
-
-      }
-
-
-      try {
-
-        await addItem(
-          "pdfs",
-          {
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            file: file
-          }
-        );
-
-
-        await loadPDFs();
-
-
-        event.target.value = "";
-
-      } catch (error) {
-
-        alert(
-          "Could not save the PDF. Your browser may have reached its storage limit."
-        );
-
-        console.error(error);
-
-      }
-
     }
-  );
 
 
-// ======================================================
-// DISPLAY PDF FILES
-// ======================================================
-
-async function loadPDFs() {
-
-  const pdfs =
-    await getAll("pdfs");
+    empty.classList.add("hidden");
 
 
-  const container =
-    $("pdfContainer");
+    flashcards.forEach(card => {
+
+        const element =
+            document.createElement("div");
 
 
-  container.innerHTML = "";
+        element.className =
+            "flashcard";
 
 
-  $("pdfEmpty")
-    .classList.toggle(
-      "hidden",
-      pdfs.length > 0
-    );
+        element.innerHTML = `
+
+            ${
+                card.image
+                    ? `
+                        <img
+                            src="${card.image}"
+                            class="flashcard-image"
+                            alt="Flashcard image">
+                      `
+                    : ""
+            }
+
+            <h3>
+                ${escapeHTML(card.question)}
+            </h3>
+
+            <div class="answer-preview">
+                ${escapeHTML(card.answer)}
+            </div>
+
+            <div class="actions">
+
+                <button
+                    class="secondary edit">
+
+                    Edit
+
+                </button>
+
+                <button
+                    class="secondary delete">
+
+                    Delete
+
+                </button>
+
+            </div>
+        `;
 
 
-  pdfs.forEach(pdf => {
-
-    const div =
-      document.createElement(
-        "div"
-      );
-
-
-    div.className =
-      "pdf-card";
-
-
-    div.innerHTML = `
-
-      <div class="pdf-name">
-        📄 ${escapeHTML(pdf.name)}
-      </div>
-
-      <div>
-        ${formatFileSize(pdf.size)}
-      </div>
-
-      <div class="pdf-actions">
-
-        <button class="primary open">
-          Open
-        </button>
-
-        <button class="secondary delete">
-          Delete
-        </button>
-
-      </div>
-
-    `;
-
-
-    // OPEN PDF
-    div
-      .querySelector(".open")
-      .addEventListener(
-        "click",
-        function() {
-
-          const url =
-            URL.createObjectURL(
-              pdf.file
+        element
+            .querySelector(".edit")
+            .addEventListener(
+                "click",
+                () => editCard(card.id)
             );
 
 
-          window.open(
-            url,
-            "_blank"
-          );
+        element
+            .querySelector(".delete")
+            .addEventListener(
+                "click",
+                () => deleteCard(card.id)
+            );
 
 
-          setTimeout(
-            function() {
+        container.appendChild(element);
+    });
+}
 
-              URL.revokeObjectURL(
-                url
-              );
 
-            },
-            60000
-          );
+/* ==================================================
+   EDIT FLASHCARD
+================================================== */
 
+function editCard(id) {
+
+    const card =
+        flashcards.find(
+            item => item.id === id
+        );
+
+
+    if (!card)
+        return;
+
+
+    editingCardId =
+        card.id;
+
+
+    modalTitle.textContent =
+        "Edit Flash Card";
+
+
+    questionInput.value =
+        card.question;
+
+
+    answerInput.value =
+        card.answer;
+
+
+    selectedImage =
+        card.image || null;
+
+
+    if (card.image) {
+
+        previewImage.src =
+            card.image;
+
+        imagePreview
+            .classList
+            .remove("hidden");
+
+        imageUploadText.textContent =
+            "Current photo";
+    } else {
+
+        resetImageInput();
+    }
+
+
+    cardModal.classList.remove("hidden");
+
+    questionInput.focus();
+}
+
+
+/* ==================================================
+   DELETE FLASHCARD
+================================================== */
+
+async function deleteCard(id) {
+
+    const confirmed =
+        confirm(
+            "Delete this flash card?"
+        );
+
+
+    if (!confirmed)
+        return;
+
+
+    try {
+
+        await deleteItem(
+            "flashcards",
+            id
+        );
+
+        await loadFlashcards();
+
+    } catch (error) {
+
+        console.error(error);
+
+        alert(
+            "Unable to delete the flash card."
+        );
+    }
+}
+
+
+/* ==================================================
+   PDF
+================================================== */
+
+const pdfInput =
+    $("#pdfInput");
+
+
+pdfInput.addEventListener(
+    "change",
+    async function () {
+
+        const file =
+            this.files[0];
+
+
+        if (!file)
+            return;
+
+
+        if (
+            file.type !==
+            "application/pdf"
+        ) {
+
+            alert(
+                "Please select a PDF file."
+            );
+
+            this.value = "";
+
+            return;
         }
-      );
 
 
-    // DELETE PDF
-    div
-      .querySelector(".delete")
-      .addEventListener(
-        "click",
-        async function() {
+        try {
 
-          if (
-            confirm(
-              "Delete this PDF?"
-            )
-          ) {
+            const buffer =
+                await file.arrayBuffer();
 
-            await deleteItem(
-              "pdfs",
-              pdf.id
+
+            const pdf = {
+
+                id: Date.now(),
+
+                name: file.name,
+
+                size: file.size,
+
+                type: file.type,
+
+                data: buffer
+            };
+
+
+            await addItem(
+                "pdfs",
+                pdf
             );
 
 
             await loadPDFs();
 
-          }
 
+            this.value = "";
+
+        } catch (error) {
+
+            console.error(error);
+
+            alert(
+                "Unable to save the PDF."
+            );
         }
-      );
+    }
+);
 
 
-    container.appendChild(
-      div
+/* ==================================================
+   LOAD PDFS
+================================================== */
+
+async function loadPDFs() {
+
+    pdfs =
+        await getAll("pdfs");
+
+
+    pdfs.sort(
+        (a, b) => b.id - a.id
     );
 
-  });
 
+    renderPDFs();
 }
 
 
-// ======================================================
-// STUDY MODE
-// ======================================================
+/* ==================================================
+   RENDER PDFS
+================================================== */
 
-async function loadStudyCards() {
+function renderPDFs() {
 
-  studyCards =
-    await getAll(
-      "flashcards"
+    const container =
+        $("#pdfContainer");
+
+    const empty =
+        $("#pdfEmpty");
+
+
+    container.innerHTML = "";
+
+
+    if (pdfs.length === 0) {
+
+        empty.classList.remove("hidden");
+
+        return;
+    }
+
+
+    empty.classList.add("hidden");
+
+
+    pdfs.forEach(pdf => {
+
+        const element =
+            document.createElement("div");
+
+
+        element.className =
+            "pdf-card";
+
+
+        element.innerHTML = `
+
+            <div class="pdf-name">
+
+                📄
+                ${escapeHTML(pdf.name)}
+
+            </div>
+
+            <div>
+                ${formatFileSize(pdf.size)}
+            </div>
+
+            <div class="pdf-actions">
+
+                <button
+                    class="primary open">
+
+                    Open
+
+                </button>
+
+                <button
+                    class="secondary delete">
+
+                    Delete
+
+                </button>
+
+            </div>
+        `;
+
+
+        element
+            .querySelector(".open")
+            .addEventListener(
+                "click",
+                () => openPDF(pdf)
+            );
+
+
+        element
+            .querySelector(".delete")
+            .addEventListener(
+                "click",
+                () => deletePDF(pdf.id)
+            );
+
+
+        container.appendChild(element);
+    });
+}
+
+
+/* ==================================================
+   OPEN PDF
+================================================== */
+
+function openPDF(pdf) {
+
+    const blob =
+        new Blob(
+            [pdf.data],
+            {
+                type:
+                    "application/pdf"
+            }
+        );
+
+
+    const url =
+        URL.createObjectURL(blob);
+
+
+    window.open(
+        url,
+        "_blank"
     );
 
 
-  if (
-    studyCards.length === 0
-  ) {
-
-    $("studyEmpty")
-      .classList.remove(
-        "hidden"
-      );
+    setTimeout(
+        () => URL.revokeObjectURL(url),
+        60000
+    );
+}
 
 
-    $("studyArea")
-      .classList.add(
-        "hidden"
-      );
+/* ==================================================
+   DELETE PDF
+================================================== */
+
+async function deletePDF(id) {
+
+    const confirmed =
+        confirm(
+            "Delete this PDF?"
+        );
 
 
-    return;
+    if (!confirmed)
+        return;
 
-  }
 
-
-  $("studyEmpty")
-    .classList.add(
-      "hidden"
+    await deleteItem(
+        "pdfs",
+        id
     );
 
 
-  $("studyArea")
-    .classList.remove(
-      "hidden"
-    );
+    await loadPDFs();
+}
 
 
-  if (
-    studyIndex >=
-    studyCards.length
-  ) {
+/* ==================================================
+   STUDY MODE
+================================================== */
+
+const cardType =
+    $("#cardType");
+
+const shuffleBtn =
+    $("#shuffleBtn");
+
+const studyEmpty =
+    $("#studyEmpty");
+
+const studyArea =
+    $("#studyArea");
+
+const studyCounter =
+    $("#studyCounter");
+
+const studyLabel =
+    $("#studyLabel");
+
+const studyQuestion =
+    $("#studyQuestion");
+
+const studyAnswer =
+    $("#studyAnswer");
+
+const studyImageContainer =
+    $("#studyImageContainer");
+
+const choices =
+    $("#choices");
+
+const showAnswerBtn =
+    $("#showAnswerBtn");
+
+const prevBtn =
+    $("#prevBtn");
+
+const nextBtn =
+    $("#nextBtn");
+
+
+function prepareStudyMode() {
+
+    studyCards =
+        [...flashcards];
+
 
     studyIndex = 0;
 
-  }
 
+    if (studyCards.length === 0) {
 
-  renderStudyCard();
+        studyEmpty
+            .classList
+            .remove("hidden");
 
-}
+        studyArea
+            .classList
+            .add("hidden");
 
-
-// ======================================================
-// SHUFFLE
-// ======================================================
-
-function shuffleCards() {
-
-  for (
-    let i =
-      studyCards.length - 1;
-    i > 0;
-    i--
-  ) {
-
-    const j =
-      Math.floor(
-        Math.random() *
-        (i + 1)
-      );
-
-
-    [
-      studyCards[i],
-      studyCards[j]
-    ] =
-    [
-      studyCards[j],
-      studyCards[i]
-    ];
-
-  }
-
-}
-
-
-$("shuffleBtn")
-  .addEventListener(
-    "click",
-    async function() {
-
-      await loadStudyCards();
-
-      shuffleCards();
-
-      studyIndex = 0;
-
-      renderStudyCard();
-
+        return;
     }
-  );
 
 
-// ======================================================
-// CARD TYPE
-// ======================================================
-
-$("cardType")
-  .addEventListener(
-    "change",
-    renderStudyCard
-  );
+    studyEmpty
+        .classList
+        .add("hidden");
 
 
-// ======================================================
-// RENDER STUDY CARD
-// ======================================================
-
-function renderStudyCard() {
-
-  if (
-    studyCards.length === 0
-  ) return;
+    studyArea
+        .classList
+        .remove("hidden");
 
 
-  const card =
-    studyCards[studyIndex];
-
-
-  const type =
-    $("cardType").value;
-
-
-  $("studyCounter")
-    .textContent =
-    `Card ${
-      studyIndex + 1
-    } of ${
-      studyCards.length
-    }`;
-
-
-  $("choices")
-    .innerHTML = "";
-
-
-  $("studyAnswer")
-    .classList.add(
-      "hidden"
-    );
-
-
-  $("studyAnswer")
-    .textContent = "";
-
-
-  // CLASSIC
-  if (type === "classic") {
-
-    $("studyLabel")
-      .textContent =
-      "Question";
-
-
-    $("studyQuestion")
-      .textContent =
-      card.question;
-
-
-    $("showAnswerBtn")
-      .classList.remove(
-        "hidden"
-      );
-
-  }
-
-
-  // REVERSE
-  else if (
-    type === "reverse"
-  ) {
-
-    $("studyLabel")
-      .textContent =
-      "Answer";
-
-
-    $("studyQuestion")
-      .textContent =
-      card.answer;
-
-
-    $("showAnswerBtn")
-      .classList.remove(
-        "hidden"
-      );
-
-  }
-
-
-  // MULTIPLE CHOICE
-  else if (
-    type === "multiple"
-  ) {
-
-    $("studyLabel")
-      .textContent =
-      "Choose the correct answer";
-
-
-    $("studyQuestion")
-      .textContent =
-      card.question;
-
-
-    $("showAnswerBtn")
-      .classList.add(
-        "hidden"
-      );
-
-
-    renderMultipleChoice(
-      card
-    );
-
-  }
-
-
-  // TRUE OR FALSE
-  else if (
-    type === "truefalse"
-  ) {
-
-    $("studyLabel")
-      .textContent =
-      "True or False";
-
-
-    $("studyQuestion")
-      .textContent =
-      `"${card.question}" has the answer: "${card.answer}"`;
-
-
-    $("showAnswerBtn")
-      .classList.add(
-        "hidden"
-      );
-
-
-    renderTrueFalse(
-      card
-    );
-
-  }
-
+    showStudyCard();
 }
 
 
-// ======================================================
-// SHOW ANSWER
-// ======================================================
+/* ==================================================
+   SHOW STUDY CARD
+================================================== */
 
-$("showAnswerBtn")
-  .addEventListener(
-    "click",
-    function() {
+function showStudyCard() {
 
-      const card =
+    if (studyCards.length === 0)
+        return;
+
+
+    const card =
         studyCards[studyIndex];
 
 
-      const type =
-        $("cardType").value;
+    const type =
+        cardType.value;
 
 
-      $("studyAnswer")
-        .textContent =
-        type === "reverse"
-          ? card.question
-          : card.answer;
+    studyCounter.textContent =
+        `Card ${studyIndex + 1} of ${studyCards.length}`;
 
 
-      $("studyAnswer")
-        .classList.remove(
-          "hidden"
-        );
+    choices.innerHTML = "";
+
+
+    studyAnswer
+        .classList
+        .add("hidden");
+
+
+    studyAnswer.textContent =
+        "";
+
+
+    showAnswerBtn
+        .classList
+        .remove("hidden");
+
+
+    studyImageContainer
+        .innerHTML = "";
+
+
+    if (
+        card.image &&
+        type !== "reverse"
+    ) {
+
+        const image =
+            document.createElement("img");
+
+
+        image.src =
+            card.image;
+
+
+        image.className =
+            "study-question-image";
+
+
+        image.alt =
+            "Flashcard image";
+
+
+        studyImageContainer
+            .appendChild(image);
+    }
+
+
+    if (type === "reverse") {
+
+        studyLabel.textContent =
+            "Answer";
+
+
+        studyQuestion.textContent =
+            card.answer;
+
+
+        studyAnswer.textContent =
+            card.question;
+
+
+    } else {
+
+        studyLabel.textContent =
+            "Question";
+
+
+        studyQuestion.textContent =
+            card.question;
+
+
+        studyAnswer.textContent =
+            card.answer;
+    }
+
+
+    if (type === "multiple") {
+
+        showAnswerBtn
+            .classList
+            .add("hidden");
+
+        createMultipleChoice(card);
 
     }
-  );
 
 
-// ======================================================
-// MULTIPLE CHOICE
-// ======================================================
+    if (type === "truefalse") {
 
-function renderMultipleChoice(
-  card
-) {
+        showAnswerBtn
+            .classList
+            .add("hidden");
 
-  const answers = [
-    card.answer
-  ];
+        createTrueFalse(card);
+    }
+}
 
 
-  studyCards
+/* ==================================================
+   SHOW ANSWER
+================================================== */
 
-    .filter(
-      c =>
-        c.id !== card.id
-    )
+showAnswerBtn.addEventListener(
+    "click",
+    () => {
 
-    .sort(
-      () =>
-        Math.random() -
-        0.5
-    )
+        studyAnswer
+            .classList
+            .toggle("hidden");
+    }
+);
 
-    .slice(0, 3)
 
-    .forEach(c => {
+/* ==================================================
+   MULTIPLE CHOICE
+================================================== */
 
-      answers.push(
-        c.answer
-      );
+function createMultipleChoice(card) {
 
+    const correct =
+        card.answer;
+
+
+    const others =
+        flashcards
+            .filter(
+                item =>
+                    item.id !== card.id
+            )
+            .map(
+                item =>
+                    item.answer
+            )
+            .filter(Boolean);
+
+
+    const shuffledOthers =
+        shuffleArray(
+            others
+        ).slice(0, 3);
+
+
+    const options =
+        shuffleArray([
+            correct,
+            ...shuffledOthers
+        ]);
+
+
+    options.forEach(option => {
+
+        const button =
+            document.createElement("button");
+
+
+        button.className =
+            "choice";
+
+
+        button.textContent =
+            option;
+
+
+        button.addEventListener(
+            "click",
+            () => {
+
+                document
+                    .querySelectorAll(".choice")
+                    .forEach(item => {
+
+                        item.disabled = true;
+
+                    });
+
+
+                if (
+                    option === correct
+                ) {
+
+                    button.classList
+                        .add("correct");
+
+                } else {
+
+                    button.classList
+                        .add("wrong");
+
+
+                    document
+                        .querySelectorAll(".choice")
+                        .forEach(item => {
+
+                            if (
+                                item.textContent ===
+                                correct
+                            ) {
+
+                                item.classList
+                                    .add("correct");
+                            }
+                        });
+                }
+            }
+        );
+
+
+        choices.appendChild(button);
+    });
+}
+
+
+/* ==================================================
+   TRUE OR FALSE
+================================================== */
+
+function createTrueFalse(card) {
+
+    const statements = [
+
+        {
+            text:
+                card.question +
+                " — " +
+                card.answer,
+
+            correct: true
+        },
+
+        {
+            text:
+                card.question +
+                " — " +
+                getWrongAnswer(card),
+
+            correct: false
+        }
+
+    ];
+
+
+    shuffleArray(
+        statements
+    ).forEach(statement => {
+
+        const button =
+            document.createElement("button");
+
+
+        button.className =
+            "choice";
+
+
+        button.textContent =
+            statement.correct
+                ? "TRUE"
+                : "FALSE";
+
+
+        button.addEventListener(
+            "click",
+            () => {
+
+                document
+                    .querySelectorAll(".choice")
+                    .forEach(item =>
+                        item.disabled = true
+                    );
+
+
+                if (
+                    statement.correct
+                ) {
+
+                    button.classList
+                        .add("correct");
+
+                } else {
+
+                    button.classList
+                        .add("wrong");
+                }
+            }
+        );
+
+
+        choices.appendChild(button);
     });
 
 
-  answers.sort(
-    () =>
-      Math.random() -
-      0.5
-  );
+    studyQuestion.textContent =
+        card.question;
+}
 
 
-  answers.forEach(
-    answer => {
+/* ==================================================
+   WRONG ANSWER HELPER
+================================================== */
 
-      const button =
-        document.createElement(
-          "button"
+function getWrongAnswer(card) {
+
+    const other =
+        flashcards.find(
+            item =>
+                item.id !== card.id
         );
 
 
-      button.className =
-        "choice";
+    if (other) {
+        return other.answer;
+    }
 
 
-      button.textContent =
-        answer;
+    return "None of the above";
+}
 
 
-      button.addEventListener(
-        "click",
-        function() {
+/* ==================================================
+   SHUFFLE
+================================================== */
 
-          document
-            .querySelectorAll(
-              ".choice"
-            )
-            .forEach(
-              b => {
-                b.disabled =
-                  true;
-              }
+function shuffleArray(array) {
+
+    const result =
+        [...array];
+
+
+    for (
+        let i = result.length - 1;
+        i > 0;
+        i--
+    ) {
+
+        const j =
+            Math.floor(
+                Math.random() *
+                (i + 1)
             );
 
 
-          if (
-            answer ===
-            card.answer
-          ) {
+        [
+            result[i],
+            result[j]
+        ] = [
+            result[j],
+            result[i]
+        ];
+    }
 
-            button.classList.add(
-              "correct"
+
+    return result;
+}
+
+
+shuffleBtn.addEventListener(
+    "click",
+    () => {
+
+        studyCards =
+            shuffleArray(
+                flashcards
             );
 
-          } else {
 
-            button.classList.add(
-              "wrong"
-            );
+        studyIndex = 0;
+
+        showStudyCard();
+    }
+);
 
 
-            document
-              .querySelectorAll(
-                ".choice"
-              )
-              .forEach(
-                b => {
+/* ==================================================
+   CARD TYPE CHANGE
+================================================== */
 
-                  if (
-                    b.textContent ===
-                    card.answer
-                  ) {
+cardType.addEventListener(
+    "change",
+    () => {
 
-                    b.classList.add(
-                      "correct"
-                    );
+        studyIndex = 0;
 
-                  }
+        showStudyCard();
+    }
+);
 
-                }
-              );
 
-          }
+/* ==================================================
+   PREVIOUS / NEXT
+================================================== */
 
+prevBtn.addEventListener(
+    "click",
+    () => {
+
+        if (studyCards.length === 0)
+            return;
+
+
+        studyIndex--;
+
+        if (studyIndex < 0) {
+
+            studyIndex =
+                studyCards.length - 1;
         }
-      );
 
 
-      $("choices")
-        .appendChild(
-          button
-        );
-
+        showStudyCard();
     }
-  );
-
-}
+);
 
 
-// ======================================================
-// TRUE OR FALSE
-// ======================================================
-
-function renderTrueFalse(
-  card
-) {
-
-  const trueButton =
-    document.createElement(
-      "button"
-    );
-
-
-  const falseButton =
-    document.createElement(
-      "button"
-    );
-
-
-  trueButton.className =
-    "choice";
-
-
-  falseButton.className =
-    "choice";
-
-
-  trueButton.textContent =
-    "TRUE";
-
-
-  falseButton.textContent =
-    "FALSE";
-
-
-  trueButton.addEventListener(
+nextBtn.addEventListener(
     "click",
-    function() {
+    () => {
 
-      trueButton.classList.add(
-        "correct"
-      );
-
-
-      trueButton.disabled =
-        true;
+        if (studyCards.length === 0)
+            return;
 
 
-      falseButton.disabled =
-        true;
+        studyIndex++;
 
+
+        if (
+            studyIndex >=
+            studyCards.length
+        ) {
+
+            studyIndex = 0;
+        }
+
+
+        showStudyCard();
     }
-  );
+);
 
 
-  falseButton.addEventListener(
-    "click",
-    function() {
-
-      falseButton.classList.add(
-        "wrong"
-      );
-
-
-      trueButton.classList.add(
-        "correct"
-      );
-
-
-      trueButton.disabled =
-        true;
-
-
-      falseButton.disabled =
-        true;
-
-    }
-  );
-
-
-  $("choices")
-    .appendChild(
-      trueButton
-    );
-
-
-  $("choices")
-    .appendChild(
-      falseButton
-    );
-
-}
-
-
-// ======================================================
-// PREVIOUS / NEXT
-// ======================================================
-
-$("prevBtn")
-  .addEventListener(
-    "click",
-    function() {
-
-      if (
-        !studyCards.length
-      ) return;
-
-
-      studyIndex =
-        (
-          studyIndex -
-          1 +
-          studyCards.length
-        ) %
-        studyCards.length;
-
-
-      renderStudyCard();
-
-    }
-  );
-
-
-$("nextBtn")
-  .addEventListener(
-    "click",
-    function() {
-
-      if (
-        !studyCards.length
-      ) return;
-
-
-      studyIndex =
-        (
-          studyIndex +
-          1
-        ) %
-        studyCards.length;
-
-
-      renderStudyCard();
-
-    }
-  );
-
-
-// ======================================================
-// START APPLICATION
-// ======================================================
+/* ==================================================
+   START APPLICATION
+================================================== */
 
 async function startApp() {
 
-  try {
+    try {
 
-    // Open local database
-    await openDatabase();
+        await openDatabase();
 
+        await loadFlashcards();
 
-    // Load saved flashcards
-    await loadFlashcards();
+        await loadPDFs();
 
+    } catch (error) {
 
-    // Load saved PDFs
-    await loadPDFs();
-
-
-    // Load Study Mode
-    await loadStudyCards();
-
-
-    // ==================================================
-    // SERVICE WORKER
-    // ==================================================
-
-    if (
-      "serviceWorker" in navigator
-    ) {
-
-      navigator.serviceWorker
-        .register(
-          "./service-worker.js"
-        )
-
-        .then(
-          function() {
-
-            console.log(
-              "Service Worker registered successfully."
-            );
-
-          }
-        )
-
-        .catch(
-          function(error) {
-
-            console.error(
-              "Service Worker registration failed:",
-              error
-            );
-
-          }
+        console.error(
+            "Application startup error:",
+            error
         );
 
+        alert(
+            "There was a problem loading your saved data."
+        );
     }
-
-  } catch (error) {
-
-    console.error(
-      "Application error:",
-      error
-    );
-
-
-    alert(
-      "The app could not open its local database."
-    );
-
-  }
-
 }
 
 
-// Start
+/* ==================================================
+   SERVICE WORKER
+================================================== */
+
+if (
+    "serviceWorker" in navigator
+) {
+
+    window.addEventListener(
+        "load",
+        () => {
+
+            navigator.serviceWorker
+                .register(
+                    "./service-worker.js"
+                )
+                .catch(
+                    error =>
+                        console.log(
+                            "Service worker error:",
+                            error
+                        )
+                );
+        }
+    );
+}
+
+
+/* ==================================================
+   RUN
+================================================== */
+
 startApp();
